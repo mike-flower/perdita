@@ -1,0 +1,11 @@
+# R session files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Temporary files
+*.tmp
+
+# macOS system junk
+.DS_Store
