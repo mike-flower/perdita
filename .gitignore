@@ -9,3 +9,7 @@
 
 # macOS system junk
 .DS_Store
+
+# Demo files
+demo/
+
