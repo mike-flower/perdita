@@ -2,27 +2,22 @@
 # perdita.sh
 #
 # Selectively copy or move files from a source directory to a destination,
-# driven by an external list of file stems or full filenames.
+# driven by an external list of filestems or full filenames.
 # Works with any file type: fastq.gz, bam, txt, docx, etc.
 #
 # Usage:
-#   bash perdita.sh --src <dir> --dest <dir> --file <file> \
-#                        --input-mode <stems|files> \
-#                        [--suffixes <suffix1,suffix2,...>] \
-#                        [--move] [--recursive]
+#   ./perdita.sh --src <dir> --dest <dir> --file <file> \
+#                --input-mode <filestems|filenames> \
+#                [--suffixes <suffix1,suffix2,...>] \
+#                [--move] [--recursive] [--force] [--dry-run]
 #
-# --input-mode stems  : each line is a stem; --suffixes are appended to find files
-# --input-mode files  : each line is a full filename, transferred one-for-one
-# --suffixes          : comma-separated list of suffixes to append in stems mode
-#                       (default: "_R1.fastq.gz,_R2.fastq.gz")
-# --move              : move files instead of copying (default: copy)
-# --recursive         : search subdirectories of --src for each file
+# See README.md for full documentation.
 
 set -euo pipefail
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 SRC_DIR=""; DEST_DIR=""; INPUT_FILE=""; INPUT_MODE=""; MODE="copy"
-SUFFIXES_RAW=""; RECURSIVE=false
+SUFFIXES_RAW=""; RECURSIVE=false; FORCE=false; DRY_RUN=false
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -34,7 +29,9 @@ while [[ $# -gt 0 ]]; do
     --suffixes)    SUFFIXES_RAW="$2";  shift 2 ;;
     --move)        MODE="move";        shift ;;
     --copy)        MODE="copy";        shift ;;
-    --recursive)   RECURSIVE=true;    shift ;;
+    --recursive)   RECURSIVE=true;     shift ;;
+    --force)       FORCE=true;         shift ;;
+    --dry-run)     DRY_RUN=true;       shift ;;
     --*)           echo "ERROR: Unknown flag: $1" >&2; exit 1 ;;
     *)             POSITIONAL+=("$1"); shift ;;
   esac
@@ -49,48 +46,75 @@ done
 [[ -z "$SRC_DIR"    ]] && { echo "ERROR: --src required"  >&2; exit 1; }
 [[ -z "$DEST_DIR"   ]] && { echo "ERROR: --dest required" >&2; exit 1; }
 [[ -z "$INPUT_FILE" ]] && { echo "ERROR: --file required" >&2; exit 1; }
-[[ -z "$INPUT_MODE" ]] && { echo "ERROR: --input-mode required (stems or files)" >&2; exit 1; }
-[[ "$INPUT_MODE" != "stems" && "$INPUT_MODE" != "files" ]] && {
-  echo "ERROR: --input-mode must be 'stems' or 'files'" >&2; exit 1
+[[ -z "$INPUT_MODE" ]] && { echo "ERROR: --input-mode required (filestems or filenames)" >&2; exit 1; }
+[[ "$INPUT_MODE" != "filestems" && "$INPUT_MODE" != "filenames" ]] && {
+  echo "ERROR: --input-mode must be 'filestems' or 'filenames'" >&2; exit 1
 }
 [[ ! -d "$SRC_DIR"    ]] && { echo "ERROR: src dir not found: $SRC_DIR"       >&2; exit 1; }
 [[ ! -f "$INPUT_FILE" ]] && { echo "ERROR: input file not found: $INPUT_FILE" >&2; exit 1; }
 
-# ── Parse suffixes ────────────────────────────────────────────────────────────
-# Default to paired-end FASTQ if not specified
-[[ -z "$SUFFIXES_RAW" ]] && SUFFIXES_RAW="_R1.fastq.gz,_R2.fastq.gz"
+# ── Same-directory guard ──────────────────────────────────────────────────────
+mkdir -p "$DEST_DIR"
+SRC_ABS=$(cd "$SRC_DIR"  && pwd -P)
+DEST_ABS=$(cd "$DEST_DIR" && pwd -P)
+[[ "$SRC_ABS" == "$DEST_ABS" ]] && {
+  echo "ERROR: --src and --dest resolve to the same directory: $SRC_ABS" >&2
+  exit 1
+}
 
+# ── Parse suffixes ────────────────────────────────────────────────────────────
+# Default to paired-end FASTQ if not specified (only relevant in filestems mode).
+[[ -z "$SUFFIXES_RAW" ]] && SUFFIXES_RAW="_R1.fastq.gz,_R2.fastq.gz"
 IFS=',' read -ra SUFFIXES <<< "$SUFFIXES_RAW"
 
-mkdir -p "$DEST_DIR"
-
+# ── Header ────────────────────────────────────────────────────────────────────
 echo "Source:      $SRC_DIR"
 echo "Destination: $DEST_DIR"
 echo "Input file:  $INPUT_FILE"
 echo "Input mode:  $INPUT_MODE"
-echo "Action:      $MODE"
+echo "Action:      $MODE$([[ "$DRY_RUN" == true ]] && echo " (dry-run)")"
 echo "Recursive:   $RECURSIVE"
-[[ "$INPUT_MODE" == "stems" ]] && echo "Suffixes:    ${SUFFIXES[*]}"
+echo "Force:       $FORCE"
+[[ "$INPUT_MODE" == "filestems" ]] && echo "Suffixes:    ${SUFFIXES[*]}"
 echo ""
 
+# ── Helper: trim CR and surrounding whitespace ────────────────────────────────
+clean_line() {
+  local s="$1"
+  s="${s%$'\r'}"                              # strip trailing CR (CRLF safety)
+  s="${s#"${s%%[![:space:]]*}"}"              # strip leading whitespace
+  s="${s%"${s##*[![:space:]]}"}"              # strip trailing whitespace
+  printf '%s' "$s"
+}
+
 # ── Helper: find a file in src (flat or recursive) ────────────────────────────
+# Always returns exit 0; caller checks for empty output. Without this, under
+# `set -e` a non-zero return from find_file would propagate through
+# `src=$(find_file …)` and abort the script before [MISSING] is reported.
 find_file() {
   local filename="$1"
   if [[ "$RECURSIVE" == true ]]; then
-    find "$SRC_DIR" -type f -name "$filename" 2>/dev/null | head -1
+    local matches
+    mapfile -t matches < <(find "$SRC_DIR" -type f -name "$filename" 2>/dev/null)
+    if (( ${#matches[@]} > 1 )); then
+      echo "  [WARN] $filename found ${#matches[@]} times under $SRC_DIR; using ${matches[0]}" >&2
+    fi
+    [[ ${#matches[@]} -gt 0 ]] && echo "${matches[0]}"
   else
     local candidate="$SRC_DIR/$filename"
     [[ -f "$candidate" ]] && echo "$candidate"
   fi
+  return 0
 }
 
 # ── Transfer ──────────────────────────────────────────────────────────────────
-ok=0; missing=0
+ok=0; missing=0; skipped=0
 
 while IFS= read -r line || [[ -n "$line" ]]; do
-  [[ -z "$line" || "$line" == \#* ]] && continue   # skip blanks/comments
+  line=$(clean_line "$line")
+  [[ -z "$line" || "$line" == \#* ]] && continue
 
-  if [[ "$INPUT_MODE" == "files" ]]; then
+  if [[ "$INPUT_MODE" == "filenames" ]]; then
     files=("$(basename "$line")")
   else
     files=()
@@ -101,22 +125,49 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   for file in "${files[@]}"; do
     src=$(find_file "$file")
-    if [[ -n "$src" ]]; then
-      if [[ "$MODE" == "move" ]]; then
-        mv "$src" "$DEST_DIR/$file"
-      else
-        cp "$src" "$DEST_DIR/$file"
-      fi
-      echo "  [${MODE}] $file"
-      (( ok++ )) || true
-    else
+
+    if [[ -z "$src" ]]; then
       echo "  [MISSING] $file" >&2
-      (( missing++ )) || true
+      missing=$((missing + 1))
+      continue
     fi
+
+    dest="$DEST_DIR/$file"
+    if [[ -e "$dest" && "$FORCE" != true ]]; then
+      echo "  [SKIP exists] $file" >&2
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    # File size for output (best effort, portable).
+    size=$(du -h "$src" 2>/dev/null | cut -f1)
+
+    if [[ "$DRY_RUN" == true ]]; then
+      echo "  [DRY-${MODE}] $file  (${size})"
+    else
+      if [[ "$MODE" == "move" ]]; then
+        mv "$src" "$dest"
+      else
+        cp "$src" "$dest"
+      fi
+      echo "  [${MODE}] $file  (${size})"
+    fi
+    ok=$((ok + 1))
   done
 
 done < "$INPUT_FILE"
 
+# ── Summary ───────────────────────────────────────────────────────────────────
+# Capitalise first letter of MODE in a bash-3.2-compatible way (macOS default).
+mode_cap="$(tr '[:lower:]' '[:upper:]' <<< "${MODE:0:1}")${MODE:1}"
+
 echo ""
-echo "Done. ${MODE^}: $ok files. Missing: $missing."
+if [[ "$DRY_RUN" == true ]]; then
+  echo "Done (dry-run). Would ${MODE}: $ok files. Missing: $missing. Skipped (exists): $skipped."
+else
+  echo "Done. ${mode_cap}: $ok files. Missing: $missing. Skipped (exists): $skipped."
+fi
+
+# Exit non-zero only if files were missing — skips on existing files are
+# not treated as errors so partial reruns don't break pipelines.
 [[ $missing -gt 0 ]] && exit 1 || exit 0

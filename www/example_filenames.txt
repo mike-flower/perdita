@@ -1,0 +1,73 @@
+# Example filenames input file for perdita.sh
+# Usage: --input-mode filenames
+#
+# Each line is a complete filename including extension.
+# Any leading path is stripped — only the basename is used.
+# Files are transferred one-for-one with no suffix expansion.
+#
+# This mode works with any file type. Mix and match as needed.
+# Include both R1 and R2 lines explicitly if you want both reads.
+#
+# Lines beginning with # are comments and are ignored.
+# Blank lines are also ignored.
+# Leading/trailing whitespace and Windows CRLF line endings are stripped.
+
+# --- FASTQ pairs ---
+DMPX_MS408-N711-A-S502-A_S9_L001_R1.fastq.gz
+DMPX_MS408-N711-A-S502-A_S9_L001_R2.fastq.gz
+DMPX_MS408-N715-A-S502-A_S12_L001_R1.fastq.gz
+DMPX_MS408-N715-A-S502-A_S12_L001_R2.fastq.gz
+DMPX_MS408-N715-A-S503-A_S24_L001_R1.fastq.gz
+DMPX_MS408-N715-A-S503-A_S24_L001_R2.fastq.gz
+DMPX_MS408-N702-A-S505-A_S26_L001_R1.fastq.gz
+DMPX_MS408-N702-A-S505-A_S26_L001_R2.fastq.gz
+DMPX_MS408-N702-A-S506-A_S38_L001_R1.fastq.gz
+DMPX_MS408-N702-A-S506-A_S38_L001_R2.fastq.gz
+DMPX_MS408-N707-A-S505-A_S31_L001_R1.fastq.gz
+DMPX_MS408-N707-A-S505-A_S31_L001_R2.fastq.gz
+DMPX_MS408-N707-A-S506-A_S43_L001_R1.fastq.gz
+DMPX_MS408-N707-A-S506-A_S43_L001_R2.fastq.gz
+DMPX_MS408-N707-A-S507-A_S55_L001_R1.fastq.gz
+DMPX_MS408-N707-A-S507-A_S55_L001_R2.fastq.gz
+DMPX_MS408-N707-A-S508-A_S67_L001_R1.fastq.gz
+DMPX_MS408-N707-A-S508-A_S67_L001_R2.fastq.gz
+DMPX_MS408-N715-A-S507-A_S60_L001_R1.fastq.gz
+DMPX_MS408-N715-A-S507-A_S60_L001_R2.fastq.gz
+DMPX_MS408-N715-A-S508-A_S72_L001_R1.fastq.gz
+DMPX_MS408-N715-A-S508-A_S72_L001_R2.fastq.gz
+DMPX_MS408-N715-C-S517-C_S240_L001_R1.fastq.gz
+DMPX_MS408-N715-C-S517-C_S240_L001_R2.fastq.gz
+DMPX_MS408-N705-A-S510-A_S77_L001_R1.fastq.gz
+DMPX_MS408-N705-A-S510-A_S77_L001_R2.fastq.gz
+DMPX_MS408-N705-A-S511-A_S89_L001_R1.fastq.gz
+DMPX_MS408-N705-A-S511-A_S89_L001_R2.fastq.gz
+DMPX_MS408-N712-A-S510-A_S82_L001_R1.fastq.gz
+DMPX_MS408-N712-A-S510-A_S82_L001_R2.fastq.gz
+DMPX_MS408-N712-A-S511-A_S94_L001_R1.fastq.gz
+DMPX_MS408-N712-A-S511-A_S94_L001_R2.fastq.gz
+DMPX_MS408-N714-A-S510-A_S83_L001_R1.fastq.gz
+DMPX_MS408-N714-A-S510-A_S83_L001_R2.fastq.gz
+DMPX_MS408-N714-A-S511-A_S95_L001_R1.fastq.gz
+DMPX_MS408-N714-A-S511-A_S95_L001_R2.fastq.gz
+
+# --- Controls (C-series) ---
+DMPX_MS408-N706-C-S513-C_S198_L001_R1.fastq.gz
+DMPX_MS408-N706-C-S513-C_S198_L001_R2.fastq.gz
+DMPX_MS408-N706-C-S515-C_S210_L001_R1.fastq.gz
+DMPX_MS408-N706-C-S515-C_S210_L001_R2.fastq.gz
+DMPX_MS408-N707-C-S513-C_S199_L001_R1.fastq.gz
+DMPX_MS408-N707-C-S513-C_S199_L001_R2.fastq.gz
+DMPX_MS408-N707-C-S515-C_S211_L001_R1.fastq.gz
+DMPX_MS408-N707-C-S515-C_S211_L001_R2.fastq.gz
+DMPX_MS408-N704-C-S513-C_S196_L001_R1.fastq.gz
+DMPX_MS408-N704-C-S513-C_S196_L001_R2.fastq.gz
+DMPX_MS408-N704-C-S515-C_S208_L001_R1.fastq.gz
+DMPX_MS408-N704-C-S515-C_S208_L001_R2.fastq.gz
+DMPX_MS408-N714-C-S517-C_S239_L001_R1.fastq.gz
+DMPX_MS408-N714-C-S517-C_S239_L001_R2.fastq.gz
+
+# --- Example: other file types can be mixed in freely ---
+# report_summary.txt
+# metadata.docx
+# alignment.bam
+# alignment.bam.bai

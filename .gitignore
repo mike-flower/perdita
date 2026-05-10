@@ -10,6 +10,8 @@
 # macOS system junk
 .DS_Store
 
-# Demo files
-demo/
+# Demo outputs (regenerated when running demo.sh)
+demo/result/
 
+# Local archives (old versions kept for reference, not for sharing)
+archive/
