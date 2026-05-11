@@ -15,3 +15,9 @@ demo/result/
 
 # Local archives (old versions kept for reference, not for sharing)
 archive/
+
+# Perdita run artefacts
+logs/
+perdita_report_*.tsv
+perdita_summary_*.txt
+

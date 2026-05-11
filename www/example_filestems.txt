@@ -1,15 +1,26 @@
 # Example filestems input file for perdita.sh
 # Usage: --input-mode filestems
 #
-# Each line is a filestem — a shared name fragment. The script appends one or
-# more suffixes to construct the target filename(s). Suffixes are set with
-# --suffixes (default: _R1.fastq.gz,_R2.fastq.gz for paired-end FASTQ).
+# Each line is a filestem — a shared name fragment that identifies a group
+# of related files. How perdita matches files depends on which flags you set:
 #
-# The same filestems.txt can be reused with different file types, e.g.:
-#   FASTQ (default):  --suffixes "_R1.fastq.gz,_R2.fastq.gz"
-#   BAM + index:      --suffixes ".bam,.bam.bai"
-#   VCF + index:      --suffixes ".vcf.gz,.vcf.gz.tbi"
-#   Single suffix:    --suffixes ".vcf.gz"
+#   Discover mode (no --suffixes, no --anchors)
+#     Pulls every file in --src whose basename starts with the stem.
+#     Refuses to run if one stem is a prefix of another (e.g. S1 vs S10).
+#
+#   Discover mode with --anchors "_."  (or similar)
+#     Pulls files where the stem is followed by one of the supplied
+#     characters (or matches the basename exactly). Use this to safely
+#     handle stems like S1 and S10.
+#
+#   Whitelist mode with --suffixes
+#     Pulls only files matching exact stem + suffix concatenations:
+#       Paired FASTQ:  --suffixes "_R1.fastq.gz,_R2.fastq.gz"
+#       BAM + index:   --suffixes ".bam,.bam.bai"
+#       VCF + index:   --suffixes ".vcf.gz,.vcf.gz.tbi"
+#       Single suffix: --suffixes ".vcf.gz"
+#
+# --anchors and --suffixes are mutually exclusive.
 #
 # Lines beginning with # are comments and are ignored.
 # Blank lines are also ignored.
