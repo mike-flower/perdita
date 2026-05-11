@@ -1,10 +1,10 @@
-# perdita.sh
+# Perdita
 
 Copy or move a defined subset of files from one directory to another, driven by a list you provide.
 
 ---
 
-## What it does
+## Background
 
 Genomics workflows (and many others) routinely produce many files in a single directory. When you need to pull out a defined subset — a cohort, a batch, a set of controls — `rsync` is heavyweight, `find` is awkward, and `cp` doesn't take a list.
 
@@ -118,6 +118,19 @@ The script exits with code `0` if everything resolved cleanly, or `1` if any fil
 | `--dry-run` | No | Show what would happen without transferring anything |
 | `--no-log` | No | Don't write a log file for this run |
 | `--no-report` | No | Don't write the TSV report or text summary |
+
+---
+
+## Choosing between filestems and filenames
+
+The two modes solve different problems. Use this table to decide which fits your situation; the detailed sections below explain how each works.
+
+| Question | Answer |
+|----------|--------|
+| All my files share predictable stems (sample IDs, run IDs, etc.)? | **`filestems`** |
+| I want to list each sample once and pull everything for it? | **`filestems`** |
+| My filenames don't share a pattern, or I'm mixing arbitrary types? | **`filenames`** |
+| I already have an explicit list of complete filenames? | **`filenames`** |
 
 ---
 
@@ -253,15 +266,6 @@ Run:
 ```
 
 All four files are transferred exactly as named.
-
-### Choosing between filestems and filenames
-
-| Question | Answer |
-|----------|--------|
-| All my files share predictable stems (sample IDs, run IDs, etc.)? | **`filestems`** |
-| I want to list each sample once and pull everything for it? | **`filestems`** |
-| My filenames don't share a pattern, or I'm mixing arbitrary types? | **`filenames`** |
-| I already have an explicit list of complete filenames? | **`filenames`** |
 
 ---
 
