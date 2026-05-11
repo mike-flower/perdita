@@ -3,21 +3,20 @@
 .Rhistory
 .RData
 .Ruserdata
-
+ 
 # Temporary files
 *.tmp
-
+ 
 # macOS system junk
 .DS_Store
-
+ 
 # Demo outputs (regenerated when running demo.sh)
 demo/result/
-
+ 
 # Local archives (old versions kept for reference, not for sharing)
 archive/
-
+ 
 # Perdita run artefacts
 logs/
-perdita_report_*.tsv
-perdita_summary_*.txt
-
+reports/
+ 

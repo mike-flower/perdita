@@ -72,8 +72,8 @@ Log file:    /path/to/perdita/logs/perdita_20260511T143215.log
   [copy] DMPX_MS408-N702-A-S506-A_S38_L001_R2.fastq.gz  (2.0M)
 
 Done. Copy: 4. Updated: 0. Matched: 0. Skipped: 0. Missing: 0. Stems with no match: 0.
-Report:      demo/result/perdita_report_20260511T143215.tsv
-Summary:     demo/result/perdita_summary_20260511T143215.txt
+Report:      demo/result/reports/perdita_report_20260511T143215.tsv
+Summary:     demo/result/reports/perdita_summary_20260511T143215.txt
 ```
 
 Each line in the body shows what happened to one file. Every run also writes a log file alongside the script and two artefacts into the destination directory — see [Logs, reports and summaries](#logs-reports-and-summaries) below.
@@ -327,21 +327,21 @@ Duplicate entries are tolerated: the script processes each line and reports the 
 
 ## Logs, reports and summaries
 
-Every run leaves three artefacts behind so you can audit what happened.
+Every run leaves three artefacts behind so you can audit what happened. The report and summary go into a `reports/` subdirectory inside `--dest` so they don't clutter the directory of transferred files.
 
 **1. A full log** at `<script_dir>/logs/perdita_<timestamp>.log` capturing the complete transcript — header, every per-file line, warnings, missing files, and the summary. Disable with `--no-log`.
 
-**2. A TSV per-file report** at `<dest>/perdita_report_<timestamp>.tsv`. Header records the invocation; body is one row per file with columns `filestem`, `status`, `filename`, `source_path`, `size`. The `status` column is one of `copied`, `moved`, `updated`, `matched`, `skipped`, `missing`, `no-match` (with `would-` prefixes under `--dry-run`). The `filestem` column shows which input line pulled each file — `-` in filenames mode. Easy to grep:
+**2. A TSV per-file report** at `<dest>/reports/perdita_report_<timestamp>.tsv`. Header records the invocation; body is one row per file with columns `filestem`, `status`, `filename`, `source_path`, `size`. The `status` column is one of `copied`, `moved`, `updated`, `matched`, `skipped`, `missing`, `no-match` (with `would-` prefixes under `--dry-run`). The `filestem` column shows which input line pulled each file — `-` in filenames mode. Easy to grep:
 
 ```bash
 # List every file pulled in by a particular sample
-awk -F'\t' '$1=="sample_A"{print $3}' perdita_report_*.tsv
+awk -F'\t' '$1=="sample_A"{print $3}' reports/perdita_report_*.tsv
 
 # Filestems that came back empty
-awk -F'\t' '$2=="no-match"{print $1}' perdita_report_*.tsv
+awk -F'\t' '$2=="no-match"{print $1}' reports/perdita_report_*.tsv
 ```
 
-**3. A human-readable summary** at `<dest>/perdita_summary_<timestamp>.txt`:
+**3. A human-readable summary** at `<dest>/reports/perdita_summary_<timestamp>.txt`:
 
 ```
 Perdita transfer summary
@@ -389,7 +389,7 @@ Per-stem counts:
 Artefacts
 ---------
 Log file:     /path/to/perdita/logs/perdita_20260511T143215.log
-TSV report:   /analysis/2026.05.11_msn/bam/perdita_report_20260511T143215.tsv
+TSV report:   /analysis/2026.05.11_msn/bam/reports/perdita_report_20260511T143215.tsv
 
 Exit code:    1  (some files / filestems unresolved — see report for details)
 ```

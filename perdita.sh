@@ -23,8 +23,8 @@
 #
 # Every run writes:
 #   - a full transcript to <script_dir>/logs/perdita_<timestamp>.log
-#   - a TSV per-file report to <dest>/perdita_report_<timestamp>.tsv
-#   - a human-readable summary to <dest>/perdita_summary_<timestamp>.txt
+#   - a TSV per-file report to <dest>/reports/perdita_report_<timestamp>.tsv
+#   - a human-readable summary to <dest>/reports/perdita_summary_<timestamp>.txt
 
 set -euo pipefail
 
@@ -393,7 +393,9 @@ printf "\n"
 REPORT_FILE=""
 SUMMARY_FILE=""
 if [[ "$NO_REPORT" != true ]]; then
-  REPORT_FILE="$DEST_DIR/perdita_report_$TIMESTAMP.tsv"
+  REPORT_DIR="$DEST_DIR/reports"
+  mkdir -p "$REPORT_DIR"
+  REPORT_FILE="$REPORT_DIR/perdita_report_$TIMESTAMP.tsv"
   {
     echo "# Perdita per-file report"
     echo "# Generated:   $(date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -427,7 +429,7 @@ if [[ "$NO_REPORT" != true ]]; then
     done
   } > "$REPORT_FILE"
 
-  SUMMARY_FILE="$DEST_DIR/perdita_summary_$TIMESTAMP.txt"
+  SUMMARY_FILE="$REPORT_DIR/perdita_summary_$TIMESTAMP.txt"
   {
     echo "Perdita transfer summary"
     echo "========================"
