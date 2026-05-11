@@ -1,6 +1,19 @@
 # perdita.sh
 
-Copy or move a defined subset of files from one directory to another, based on a list you provide. Works with any file type — `.fastq.gz`, `.bam`, `.txt`, `.docx`, and so on.
+Copy or move a defined subset of files from one directory to another, driven by a list you provide.
+
+---
+
+## What it does
+
+Genomics workflows (and many others) routinely produce hundreds of files in a single directory. When you need to pull out a defined subset — a cohort, a batch, a set of controls — `rsync` is heavyweight, `find` is awkward, and `cp` doesn't take a list.
+
+Perdita does one thing well: you point it at a source directory, a destination directory, and a text file listing what you want, and it transfers exactly those files. The list can be either:
+
+- **`filestems`** — one line per *sample*, with suffixes appended automatically (e.g. one line `sample_A` becomes both `sample_A_R1.fastq.gz` and `sample_A_R2.fastq.gz`)
+- **`filenames`** — one line per *file*, transferred literally
+
+Works with any file type — `.fastq.gz`, `.bam`, `.txt`, `.docx`, and so on. It also handles common operational needs: dry-run preview, skip-on-exists for idempotent reruns, `--move` instead of copy, recursive search across subdirectories, and CRLF-safe input parsing.
 
 > **Try it:** clone the repo and run `bash demo/demo.sh` from the repo root to see perdita transfer a small included dataset.
 
@@ -24,9 +37,9 @@ source ~/.zshrc
 
 ---
 
-## Quick start
+## Quick run
 
-You need three things: a **source directory**, a **destination directory**, and a **list** of what to transfer. The example below uses the included demo dataset, so it works as-is from the repo root.
+The included demo runs from the repo root:
 
 ```bash
 ./perdita.sh \
@@ -36,7 +49,12 @@ You need three things: a **source directory**, a **destination directory**, and 
   --input-mode filestems
 ```
 
-Output:
+This transfers two paired-end FASTQ samples (four files total) from `demo/fastq/` into `demo/result/`. The destination directory is created automatically if it doesn't exist.
+
+---
+
+## What the output looks like
+
 ```
 Source:      demo/fastq
 Destination: demo/result
@@ -55,7 +73,39 @@ Suffixes:    _R1.fastq.gz _R2.fastq.gz
 Done. Copy: 4 files. Missing: 0. Skipped (exists): 0.
 ```
 
-The destination directory is created automatically if it does not exist.
+Each line in the body shows what happened to one file. The tags that can appear:
+
+| Tag | Meaning | Stream |
+|-----|---------|--------|
+| `[copy]` / `[move]` | Successfully transferred | stdout |
+| `[DRY-copy]` / `[DRY-move]` | Would be transferred (under `--dry-run`) | stdout |
+| `[MISSING]` | Not found in `--src` | stderr |
+| `[SKIP exists]` | Already exists in `--dest` (use `--force` to overwrite) | stderr |
+| `[WARN]` | Multiple matches in `--recursive` mode; first one used | stderr |
+
+The split between stdout and stderr lets you redirect transfer logs and error messages independently:
+
+```bash
+./perdita.sh ... > transfers.log 2> errors.log
+```
+
+The script exits with code `0` if no files were missing, or `1` if any were missing. Skipped files (already in dest) do **not** trigger a non-zero exit, so partial reruns work cleanly in pipelines.
+
+---
+
+## Parameters
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--src` | Yes | Directory containing the source files |
+| `--dest` | Yes | Destination directory (created if it doesn't exist) |
+| `--file` | Yes | Path to your input list (filestems or filenames) |
+| `--input-mode` | Yes | `filestems` or `filenames` |
+| `--suffixes` | No | Comma-separated suffixes for filestems mode. Default: `_R1.fastq.gz,_R2.fastq.gz` |
+| `--move` | No | Move files instead of copying (default: copy) |
+| `--recursive` | No | Search subdirectories of `--src` for each file |
+| `--force` | No | Overwrite existing files in `--dest` (default: skip them) |
+| `--dry-run` | No | Show what would happen without transferring anything |
 
 ---
 
@@ -171,53 +221,6 @@ sample_D
 ```
 
 For longer worked examples, see `www/example_filestems.txt` and `www/example_filenames.txt`.
-
----
-
-## Parameters
-
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--src` | Yes | Directory containing the source files |
-| `--dest` | Yes | Destination directory (created if it doesn't exist) |
-| `--file` | Yes | Path to your input list (filestems or filenames) |
-| `--input-mode` | Yes | `filestems` or `filenames` |
-| `--suffixes` | No | Comma-separated suffixes for filestems mode. Default: `_R1.fastq.gz,_R2.fastq.gz` |
-| `--move` | No | Move files instead of copying (default: copy) |
-| `--recursive` | No | Search subdirectories of `--src` for each file |
-| `--force` | No | Overwrite existing files in `--dest` (default: skip them) |
-| `--dry-run` | No | Show what would happen without transferring anything |
-
----
-
-## Output
-
-The script prints each transfer with the file size, then a summary:
-
-```
-  [copy] sample_A_R1.fastq.gz  (1.2G)
-  [copy] sample_A_R2.fastq.gz  (1.3G)
-
-Done. Copy: 2 files. Missing: 0. Skipped (exists): 0.
-```
-
-The tags that can appear:
-
-| Tag | Meaning | Stream |
-|-----|---------|--------|
-| `[copy]` / `[move]` | Successfully transferred | stdout |
-| `[DRY-copy]` / `[DRY-move]` | Would be transferred (under `--dry-run`) | stdout |
-| `[MISSING]` | Not found in `--src` | stderr |
-| `[SKIP exists]` | Already exists in `--dest` (use `--force` to overwrite) | stderr |
-| `[WARN]` | Multiple matches in `--recursive` mode; first one used | stderr |
-
-The split between stdout and stderr lets you redirect transfer logs and error messages independently:
-
-```bash
-./perdita.sh ... > transfers.log 2> errors.log
-```
-
-The script exits with code `0` if no files were missing, or `1` if any were missing. Skipped files (already in dest) do **not** trigger a non-zero exit, so partial reruns work cleanly in pipelines.
 
 ---
 
