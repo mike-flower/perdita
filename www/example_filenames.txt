@@ -8,6 +8,11 @@
 # This mode works with any file type. Mix and match as needed.
 # Include both R1 and R2 lines explicitly if you want both reads.
 #
+# With --recursive, perdita walks subdirectories of --src looking for each
+# filename. If the same filename appears at multiple paths, the
+# lexicographically first wins and the rest are dropped (status
+# duplicate-ignored in the TSV).
+#
 # Lines beginning with # are comments and are ignored.
 # Blank lines are also ignored.
 # Leading/trailing whitespace and Windows CRLF line endings are stripped.

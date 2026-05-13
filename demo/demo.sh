@@ -12,7 +12,7 @@
   --file "/Users/michaelflower/my_bin/utils/winter_tale/subset_files/perdita/demo/demo_filestems.txt" \
   --input-mode filestems
   # --dry-run                                    # Preview without transferring
-  # --recursive                                  # Search subdirectories of --src
+  # --recursive                                  # Search subdirectories of --src (dedupes by basename)
   # --anchors "_."                               # Require _ or . after stem (S1 vs S10 disambiguation)
   # --suffixes "_R1.fastq.gz,_R2.fastq.gz"       # Whitelist: only paired-end FASTQ
   # --on-exists skip                             # Don't touch existing dest files

@@ -21,6 +21,11 @@
 # the filestem must be followed by one of the supplied characters (or be an
 # exact match) for a file to count.
 #
+# With --recursive, if the same basename appears at multiple paths under --src,
+# the lexicographically first path is used and the others are dropped with a
+# [WARN] showing every candidate and its size. Dropped paths are recorded in
+# the TSV with status duplicate-ignored.
+#
 # Every run writes:
 #   - a full transcript to <script_dir>/logs/perdita_<timestamp>.log
 #   - a TSV per-file report to <dest>/reports/perdita_report_<timestamp>.tsv
@@ -149,37 +154,92 @@ file_size_bytes() {
   wc -c < "$1" | tr -d ' '
 }
 
-# Look up an exact filename in --src. Always returns 0.
+# Emit a [WARN] block for a basename that has multiple candidate source paths
+# under --src (recursive runs only). The first path is the one being USED
+# (lexicographically earliest); the rest are ignored. Sizes are printed for
+# every candidate so any size mismatch is immediately visible.
+warn_duplicates() {
+  local base_arg="$1"; shift
+  local paths=("$@")
+  local count=${#paths[@]}
+  local sizes_bytes=()
+  local i
+  for ((i=0; i<count; i++)); do
+    sizes_bytes+=("$(file_size_bytes "${paths[$i]}")")
+  done
+  local first_size="${sizes_bytes[0]}"
+  local size_mismatch=false
+  for ((i=1; i<count; i++)); do
+    if [[ "${sizes_bytes[$i]}" != "$first_size" ]]; then
+      size_mismatch=true
+      break
+    fi
+  done
+  if [[ "$size_mismatch" == true ]]; then
+    echo "  [WARN] $base_arg found $count times under --src; SIZES DIFFER – using first by sort order" >&2
+  else
+    echo "  [WARN] $base_arg found $count times under --src (same size); using first by sort order" >&2
+  fi
+  local marker human_size size_note
+  for ((i=0; i<count; i++)); do
+    if (( i == 0 )); then marker="[USED]   "; else marker="[ignored]"; fi
+    human_size=$(du -h "${paths[$i]}" 2>/dev/null | cut -f1)
+    if [[ "$size_mismatch" == true ]]; then
+      size_note="${human_size}, ${sizes_bytes[$i]} bytes"
+    else
+      size_note="$human_size"
+    fi
+    echo "         $marker ${paths[$i]} ($size_note)" >&2
+  done
+}
+
+# Look up an exact filename in --src. Sets FIND_FILE_RESULT to the chosen
+# source path ("" if not found). With --recursive and >1 hit, picks the
+# lexicographically first path, warns, and logs the ignored paths to the
+# report. Uses a global result rather than stdout so it can mutate counters
+# and REPORT_ROWS without being swallowed by command substitution.
 find_file() {
   local filename="$1"
+  FIND_FILE_RESULT=""
   if [[ "$RECURSIVE" == true ]]; then
-    local first=""; local count=0; local match=""
+    local all_matches=()
+    local match=""
     while IFS= read -r match; do
-      count=$((count + 1))
-      [[ -z "$first" ]] && first="$match"
-    done < <(find "$SRC_DIR" -type f -name "$filename" 2>/dev/null)
+      all_matches+=("$match")
+    done < <(find "$SRC_DIR" -type f -name "$filename" 2>/dev/null | LC_ALL=C sort)
+    local count=${#all_matches[@]}
     if (( count > 1 )); then
-      echo "  [WARN] $filename found $count times under $SRC_DIR; using $first" >&2
+      warn_duplicates "$filename" "${all_matches[@]}"
+      duplicate_count=$((duplicate_count + count - 1))
+      local i ignored_size
+      for ((i=1; i<count; i++)); do
+        ignored_size=$(du -h "${all_matches[$i]}" 2>/dev/null | cut -f1)
+        REPORT_ROWS+=("-"$'\t'"duplicate-ignored"$'\t'"$filename"$'\t'"${all_matches[$i]}"$'\t'"$ignored_size")
+      done
     fi
-    [[ -n "$first" ]] && echo "$first"
+    (( count > 0 )) && FIND_FILE_RESULT="${all_matches[0]}"
   else
     local candidate="$SRC_DIR/$filename"
-    [[ -f "$candidate" ]] && echo "$candidate"
+    [[ -f "$candidate" ]] && FIND_FILE_RESULT="$candidate"
   fi
   return 0
 }
 
 # Discover all files in --src whose basename matches the filestem under the
-# active anchoring rule. Returns one path per line, exit 0 even if no matches.
+# active anchoring rule. Sets DISCOVER_FILES_RESULT to a deduped array of
+# source paths (one per unique basename). With --recursive, if the same
+# basename appears at multiple paths, the lexicographically first wins,
+# a [WARN] is emitted, and the ignored paths are logged to the report.
 discover_files() {
   local stem="$1"
+  DISCOVER_FILES_RESULT=()
   local matches=()
 
   if [[ "$RECURSIVE" == true ]]; then
     local m=""
     while IFS= read -r m; do
       matches+=("$m")
-    done < <(find "$SRC_DIR" -type f -name "${stem}*" 2>/dev/null)
+    done < <(find "$SRC_DIR" -type f -name "${stem}*" 2>/dev/null | LC_ALL=C sort)
   else
     local f
     for f in "$SRC_DIR"/"${stem}"*; do
@@ -206,9 +266,52 @@ discover_files() {
     matches=( ${kept[@]+"${kept[@]}"} )
   fi
 
-  for m in ${matches[@]+"${matches[@]}"}; do
-    echo "$m"
-  done
+  # Dedupe by basename. matches is already sorted by full path in the
+  # recursive branch; sort defensively for the glob branch too so the
+  # per-basename "first wins" is deterministic regardless of shell.
+  if (( ${#matches[@]} > 1 )); then
+    local sorted=()
+    local s
+    while IFS= read -r s; do
+      sorted+=("$s")
+    done < <(printf '%s\n' "${matches[@]}" | LC_ALL=C sort)
+
+    # Group paths by basename, preserving sorted order within each group.
+    local -A by_base=()
+    local order_bases=()
+    local f base
+    for f in "${sorted[@]}"; do
+      base=$(basename "$f")
+      if [[ -z "${by_base[$base]+x}" ]]; then
+        by_base[$base]="$f"
+        order_bases+=("$base")
+      else
+        by_base[$base]+=$'\n'"$f"
+      fi
+    done
+
+    local deduped=()
+    for base in "${order_bases[@]}"; do
+      local paths=()
+      local p
+      while IFS= read -r p; do
+        paths+=("$p")
+      done <<< "${by_base[$base]}"
+      if (( ${#paths[@]} > 1 )); then
+        warn_duplicates "$base" "${paths[@]}"
+        duplicate_count=$((duplicate_count + ${#paths[@]} - 1))
+        local i ignored_size
+        for ((i=1; i<${#paths[@]}; i++)); do
+          ignored_size=$(du -h "${paths[$i]}" 2>/dev/null | cut -f1)
+          REPORT_ROWS+=("$stem"$'\t'"duplicate-ignored"$'\t'"$base"$'\t'"${paths[$i]}"$'\t'"$ignored_size")
+        done
+      fi
+      deduped+=("${paths[0]}")
+    done
+    matches=( "${deduped[@]}" )
+  fi
+
+  DISCOVER_FILES_RESULT=( ${matches[@]+"${matches[@]}"} )
   return 0
 }
 
@@ -260,6 +363,10 @@ matched_count=0
 skipped_count=0
 missing_count=0
 stem_no_match_count=0   # filestems that yielded zero matches under discover mode
+duplicate_count=0       # source paths ignored because another path with the same basename was preferred
+
+FIND_FILE_RESULT=""             # set by find_file()
+DISCOVER_FILES_RESULT=()        # set by discover_files()
 
 REPORT_ROWS=()           # final per-file rows: filestem \t status \t filename \t src \t size
 REPORT_MISSING_STEMS=()  # stems with zero matches (discover mode)
@@ -341,23 +448,24 @@ for line in ${RAW_ENTRIES[@]+"${RAW_ENTRIES[@]}"}; do
 
   if [[ "$INPUT_MODE" == "filenames" ]]; then
     file=$(basename "$line")
-    src=$(find_file "$file")
+    find_file "$file"
+    src="$FIND_FILE_RESULT"
     process_one_file "-" "$file" "$src"
     # filenames mode: stem-counts section not emitted
 
   elif [[ "$DISCOVER_MODE" == true ]]; then
-    discovered=$(discover_files "$line")
-    if [[ -z "$discovered" ]]; then
+    discover_files "$line"
+    if (( ${#DISCOVER_FILES_RESULT[@]} == 0 )); then
       echo "  [NO MATCH] filestem '$line' matched zero files in --src" >&2
       stem_no_match_count=$((stem_no_match_count + 1))
       REPORT_MISSING_STEMS+=("$line")
       REPORT_ROWS+=("$line"$'\t'"no-match"$'\t'-$'\t'-$'\t'-)
     else
-      while IFS= read -r src; do
+      for src in "${DISCOVER_FILES_RESULT[@]}"; do
         file=$(basename "$src")
         process_one_file "$line" "$file" "$src"
         files_for_this_stem=$((files_for_this_stem + 1))
-      done <<< "$discovered"
+      done
     fi
     STEM_COUNTS+=("$line"$'\t'"$files_for_this_stem")
 
@@ -365,7 +473,8 @@ for line in ${RAW_ENTRIES[@]+"${RAW_ENTRIES[@]}"}; do
     # filestems mode with --suffixes (whitelist)
     for suffix in "${SUFFIXES[@]}"; do
       file="${line}${suffix}"
-      src=$(find_file "$file")
+      find_file "$file"
+      src="$FIND_FILE_RESULT"
       process_one_file "$line" "$file" "$src"
       [[ -n "$src" ]] && files_for_this_stem=$((files_for_this_stem + 1))
     done
@@ -386,6 +495,9 @@ else
 fi
 if [[ "$DISCOVER_MODE" == true ]]; then
   printf " Stems with no match: %d." "$stem_no_match_count"
+fi
+if (( duplicate_count > 0 )); then
+  printf " Source duplicates ignored: %d." "$duplicate_count"
 fi
 printf "\n"
 
@@ -486,6 +598,7 @@ if [[ "$NO_REPORT" != true ]]; then
     if [[ "$DISCOVER_MODE" == true ]]; then
       printf "  Stems with no match:      %d\n" "$stem_no_match_count"
     fi
+    printf "  Source duplicates ignored: %d\n" "$duplicate_count"
     echo ""
 
     # Per-filestem file counts (filestems mode only)

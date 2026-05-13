@@ -89,7 +89,7 @@ The tags that can appear:
 | `[SKIP exists]` | Under `--on-exists skip`: dest file already exists, no comparison done | stderr |
 | `[MISSING]` | File not found in `--src` (filenames mode, or filestems with `--suffixes`) | stderr |
 | `[NO MATCH]` | Filestem matched zero files in `--src` (discover mode) | stderr |
-| `[WARN]` | Multiple matches in `--recursive` mode; first one used | stderr |
+| `[WARN]` | `--recursive` found the same filename at multiple paths under `--src`; the lexicographically first path is used and the rest are dropped (status `duplicate-ignored` in the TSV). Sizes are shown for every candidate so any mismatch is visible. | stderr |
 | `[PREFIX COLLISION]` | Pre-flight detected one filestem is a prefix of another — script will refuse to run | stderr |
 
 The split between stdout and stderr lets you redirect transfer logs and error messages independently:
@@ -287,6 +287,27 @@ When to pick which:
 
 ---
 
+## Handling duplicate source paths under `--recursive`
+
+When you run with `--recursive`, perdita walks every subdirectory of `--src` looking for matches. If the same filename appears at more than one path under that tree, perdita keeps a single copy and drops the rest. The picking rule is **lexicographically first full path wins** – a deterministic alphabetical order, not whatever the filesystem happens to return first.
+
+For each set of duplicates perdita prints a `[WARN]` block listing every candidate path with its size:
+
+```
+  [WARN] sample_A_R1.fastq.gz found 2 times under --src; SIZES DIFFER – using first by sort order
+         [USED]    /data/runs/run01/sample_A_R1.fastq.gz (1.4G, 1503948732 bytes)
+         [ignored] /data/runs/run02/sample_A_R1.fastq.gz (1.2G, 1289334210 bytes)
+  [copy] sample_A_R1.fastq.gz  (1.4G)
+```
+
+The dropped paths are also written to the TSV with status `duplicate-ignored` so the audit trail is complete – you can later see exactly which path was chosen and which were rejected. Sizes match the rounded `du -h` format in the size column; the warning text includes exact byte counts whenever the duplicates actually differ in size, so a real disagreement between two copies is unambiguous regardless of file scale.
+
+The summary file's "Outcomes" section gains a `Source duplicates ignored: N` line, and the terminal's `Done.` line appends the same count whenever it's non-zero.
+
+Deduplication operates on the basename (the full filename), not on the filestem. Different files sharing a stem – for example `..._R1.fastq.gz` and `..._R2.fastq.gz` for the same stem – are different basenames and both stay. Only exact-filename collisions are consolidated.
+
+---
+
 ## Input file format
 
 Both filestems and filenames modes share the same file format conventions:
@@ -321,7 +342,7 @@ Duplicate entries are tolerated: the script processes each line and reports the 
 - **Mutually exclusive matching flags.** `--anchors` and `--suffixes` can't both be set — they encode conflicting intents for how to match files.
 - **Same-directory guard.** If `--src` and `--dest` resolve to the same directory, the script exits with an error before doing anything.
 - **Dry-run mode.** `--dry-run` shows exactly what would be transferred without touching any files. Recommended before any `--move` operation.
-- **Duplicate warning in recursive mode.** If `--recursive` finds the same filename in multiple subdirectories, the script warns and uses the first match.
+- **Deterministic deduplication in recursive mode.** When `--recursive` finds the same filename at multiple paths under `--src`, perdita keeps the lexicographically first path and drops the rest with a `[WARN]` listing every candidate and its size. Dropped paths are also written to the TSV with status `duplicate-ignored`, so you can audit exactly which copy was used. When the duplicates differ in size, the warning highlights that explicitly and includes byte counts.
 
 ---
 
@@ -331,7 +352,7 @@ Every run leaves three artefacts behind so you can audit what happened. The repo
 
 **1. A full log** at `<script_dir>/logs/perdita_<timestamp>.log` capturing the complete transcript — header, every per-file line, warnings, missing files, and the summary. Disable with `--no-log`.
 
-**2. A TSV per-file report** at `<dest>/reports/perdita_report_<timestamp>.tsv`. Header records the invocation; body is one row per file with columns `filestem`, `status`, `filename`, `source_path`, `size`. The `status` column is one of `copied`, `moved`, `updated`, `matched`, `skipped`, `missing`, `no-match` (with `would-` prefixes under `--dry-run`). The `filestem` column shows which input line pulled each file — `-` in filenames mode. Easy to grep:
+**2. A TSV per-file report** at `<dest>/reports/perdita_report_<timestamp>.tsv`. Header records the invocation; body is one row per file with columns `filestem`, `status`, `filename`, `source_path`, `size`. The `status` column is one of `copied`, `moved`, `updated`, `matched`, `skipped`, `missing`, `no-match`, or `duplicate-ignored` (with `would-` prefixes under `--dry-run`). The `filestem` column shows which input line pulled each file – `-` in filenames mode, and `-` for `duplicate-ignored` rows arising in filenames mode. Easy to grep:
 
 ```bash
 # List every file pulled in by a particular sample
@@ -339,6 +360,9 @@ awk -F'\t' '$1=="sample_A"{print $3}' reports/perdita_report_*.tsv
 
 # Filestems that came back empty
 awk -F'\t' '$2=="no-match"{print $1}' reports/perdita_report_*.tsv
+
+# Source paths that were dropped because a duplicate basename won out
+awk -F'\t' '$2=="duplicate-ignored"{print $3"\t"$4}' reports/perdita_report_*.tsv
 ```
 
 **3. A human-readable summary** at `<dest>/reports/perdita_summary_<timestamp>.txt`:
@@ -373,6 +397,7 @@ Outcomes (per file)
   Skipped (exists):       0
   Missing:                0
   Stems with no match:    1
+  Source duplicates ignored: 0
 
 Files pulled per filestem
 -------------------------

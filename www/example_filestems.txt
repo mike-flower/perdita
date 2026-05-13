@@ -22,6 +22,13 @@
 #
 # --anchors and --suffixes are mutually exclusive.
 #
+# With --recursive, perdita walks subdirectories of --src and dedupes by
+# basename: if the same filename appears at multiple paths, the
+# lexicographically first path wins. The dropped paths are recorded in
+# the TSV with status duplicate-ignored. Different files sharing a stem
+# (e.g. ..._R1.fastq.gz and ..._R2.fastq.gz for the same sample) are
+# different basenames and both stay.
+#
 # Lines beginning with # are comments and are ignored.
 # Blank lines are also ignored.
 # Leading/trailing whitespace and Windows CRLF line endings are stripped.
